@@ -4,7 +4,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, ImageIcon, VideoIcon, AlertCircle, Image as LucideImage, Film, Sparkles, Info } from 'lucide-react'; // Added Info icon
+import { Loader2, ImageIcon, VideoIcon, AlertCircle, Image as LucideImage, Film, Sparkles, Info } from 'lucide-react';
+// Import the server actions
 import { generateMedia, checkMediaStatus } from '@/lib/actions/media.actions';
 import { toast } from 'sonner';
 import Image from 'next/image';
@@ -25,11 +26,11 @@ export function MediaGenerationForm({
   onGenerationStart
 }: MediaGenerationFormProps) {
   const [prompt, setPrompt] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [pollingMediaId, setPollingMediaId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Tracks initial submission
+  const [pollingMediaId, setPollingMediaId] = useState<string | null>(null); // ID being polled
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewStatus, setPreviewStatus] = useState<'idle' | 'pending' | 'processing' | 'completed' | 'failed'>('idle');
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null); // Ref to store interval ID
 
   // --- DEBUG: Log state changes ---
   useEffect(() => {
@@ -37,27 +38,32 @@ export function MediaGenerationForm({
   }, [isSubmitting, pollingMediaId, previewStatus, previewUrl, mediaType]);
   // --- END DEBUG ---
 
+  // Function to stop polling
   const stopPolling = useCallback((reason: string) => {
     if (intervalRef.current) {
       console.log(`Form (${mediaType}): Stopping polling for media ${pollingMediaId}. Reason: ${reason}`);
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-  }, [pollingMediaId, mediaType]);
+    // Don't clear pollingMediaId here, it's needed to show the final state
+  }, [pollingMediaId, mediaType]); // Include dependencies
 
+  // Cleanup interval on unmount
   useEffect(() => {
     return () => {
       stopPolling("unmount");
     };
   }, [stopPolling]);
 
+  // The polling function - Calls the server action to check DB status
   const pollStatus = useCallback(async (mediaId: string) => {
     if (!mediaId) return;
 
-    console.log(`Form (${mediaType}): Polling status for ${mediaId}...`);
+    console.log(`Form (${mediaType}): Polling DB status for ${mediaId}...`);
     try {
+      // Call the server action which NOW ONLY reads the DB
       const result = await checkMediaStatus(mediaId);
-      console.log(`Form (${mediaType}): Poll result for ${mediaId}:`, result);
+      console.log(`Form (${mediaType}): Poll result from DB for ${mediaId}:`, result);
 
       setPreviewStatus(result.status as typeof previewStatus);
 
@@ -69,28 +75,33 @@ export function MediaGenerationForm({
         toast.error(`Generation failed: ${result.error || 'Unknown reason'}`);
         stopPolling("failed");
       } else {
-        console.log(`Form (${mediaType}): Status is ${result.status}, continuing poll for ${mediaId}`);
+        // Still pending or processing according to DB, continue polling
+        console.log(`Form (${mediaType}): Status is ${result.status} (from DB), continuing poll for ${mediaId}`);
       }
     } catch (error) {
-      console.error(`Form (${mediaType}): Error during polling for ${mediaId}:`, error);
+      console.error(`Form (${mediaType}): Error during DB polling for ${mediaId}:`, error);
       toast.error("Error checking status.");
-      setPreviewStatus('failed');
+      setPreviewStatus('failed'); // Assume failed if polling itself fails
       stopPolling("polling error");
     }
-  }, [mediaType, stopPolling]);
+  }, [mediaType, stopPolling]); // Include dependencies
 
+  // Effect to start/stop polling interval based on pollingMediaId
   useEffect(() => {
     if (pollingMediaId) {
-      stopPolling("starting new poll");
+      stopPolling("starting new poll"); // Clear any existing interval first
       console.log(`Form (${mediaType}): Starting polling interval for ${pollingMediaId}`);
+      // Initial check immediately
       pollStatus(pollingMediaId);
-      intervalRef.current = setInterval(() => pollStatus(pollingMediaId), 5000);
+      // Set up interval
+      intervalRef.current = setInterval(() => pollStatus(pollingMediaId), 5000); // Poll every 5 seconds
     } else {
-        stopPolling("pollingMediaId cleared");
+        stopPolling("pollingMediaId cleared"); // Stop if ID is cleared
     }
 
+    // Cleanup function for this effect specifically
     return () => stopPolling("pollingMediaId changed or effect re-run");
-  }, [pollingMediaId, pollStatus, stopPolling, mediaType]);
+  }, [pollingMediaId, pollStatus, stopPolling, mediaType]); // Depend on pollingMediaId
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -100,9 +111,9 @@ export function MediaGenerationForm({
 
     setIsSubmitting(true);
     setPreviewUrl(null);
-    setPreviewStatus('pending');
-    setPollingMediaId(null);
-    stopPolling("new submission");
+    setPreviewStatus('pending'); // Set initial status immediately
+    setPollingMediaId(null); // Clear previous ID
+    stopPolling("new submission"); // Stop any previous polling
 
     console.log(`Form (${mediaType}): Submitting generation request...`);
 
@@ -111,50 +122,57 @@ export function MediaGenerationForm({
       formData.append('prompt', prompt);
       formData.append('mediaType', mediaType);
 
+      // Call the server action to initiate generation (deducts credits, creates DB record, invokes Edge Function)
+      // This action should return quickly with the mediaId
       const result = await generateMedia(formData);
       console.log(`Form (${mediaType}): generateMedia action result:`, result);
 
       if (!result.success || !result.mediaId) {
         toast.error(result.error || 'Failed to start generation');
-        setPreviewStatus('failed');
+        setPreviewStatus('failed'); // Mark as failed if the initial action fails
       } else {
         toast.info(`Your ${mediaType} generation has started! Monitoring status...`);
+        // Set the ID returned by the action to start polling for it
         setPollingMediaId(result.mediaId);
+        // The useEffect dependency on pollingMediaId will now start the polling interval
         if (onGenerationStart) {
-          onGenerationStart(result.mediaId);
+          onGenerationStart(result.mediaId); // Notify parent (MediaLibrary) about the new item
         }
       }
     } catch (error: any) {
       console.error(`Form (${mediaType}): Error during submission:`, error);
       toast.error('An unexpected error occurred during submission');
-      setPreviewStatus('failed');
+      setPreviewStatus('failed'); // Mark as failed on unexpected error
     } finally {
+       // Set submitting false once the initial request is done, polling handles subsequent states
        setIsSubmitting(false);
     }
   }
 
+  // Reset preview if prompt changes
   useEffect(() => {
+    // Reset preview and stop polling if user types a new prompt
     setPreviewStatus('idle');
     setPreviewUrl(null);
     stopPolling("prompt changed");
-    setPollingMediaId(null);
-  }, [prompt, stopPolling]);
+    setPollingMediaId(null); // Stop polling any previous item
+  }, [prompt, stopPolling]); // Depend only on prompt and stopPolling
 
+  // Determine if the form is effectively in a loading state
   const isLoading = isSubmitting || previewStatus === 'processing' || previewStatus === 'pending';
 
   return (
-    // Use items-stretch to make columns equal height if needed, or items-start
     <div className="grid md:grid-cols-2 gap-8 items-start">
       {/* Form Section */}
       <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.5 }}
-        className="space-y-5" // Increased spacing
+        className="space-y-5"
       >
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label htmlFor={`${mediaType}-prompt`} className="block text-base font-medium mb-2 text-foreground/90"> {/* Larger label */}
+            <label htmlFor={`${mediaType}-prompt`} className="block text-base font-medium mb-2 text-foreground/90">
               Enter your prompt
             </label>
             <Textarea
@@ -163,23 +181,23 @@ export function MediaGenerationForm({
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               disabled={isLoading}
-              rows={7} // Slightly more rows
-              className="resize-none glass-input bg-white/5 border-white/15 focus:border-primary/60 focus:ring-primary/30 focus:ring-2 transition-all text-base p-3 rounded-lg" // Enhanced style
+              rows={7}
+              className="resize-none glass-input bg-white/5 border-white/15 focus:border-primary/60 focus:ring-primary/30 focus:ring-2 transition-all text-base p-3 rounded-lg"
             />
           </div>
           <Button
             type="submit"
             disabled={isLoading || !prompt.trim() || userCredits < creditCost}
-            className="w-full glass-button bg-gradient-to-r from-primary to-secondary text-white hover:opacity-95 hover:shadow-lg transition-all duration-300 shadow-md text-lg py-3 font-semibold" // Larger text/padding
+            className="w-full glass-button bg-gradient-to-r from-primary to-secondary text-white hover:opacity-95 hover:shadow-lg transition-all duration-300 shadow-md text-lg py-3 font-semibold"
           >
             {isLoading ? (
               <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> {/* Slightly larger spinner */}
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                 {isSubmitting ? 'Starting...' : (previewStatus === 'pending' ? 'Pending...' : 'Processing...')}
               </>
             ) : (
               <>
-                <Sparkles className="mr-2 h-5 w-5" /> {/* Slightly larger icon */}
+                <Sparkles className="mr-2 h-5 w-5" />
                 Generate {mediaType} ({creditCost} credits)
               </>
             )}
@@ -202,11 +220,10 @@ export function MediaGenerationForm({
         transition={{ duration: 0.5, delay: 0.1 }}
         className="flex flex-col"
       >
-        <label className="block text-base font-medium mb-2 text-foreground/90"> {/* Larger label */}
+        <label className="block text-base font-medium mb-2 text-foreground/90">
           Result preview
         </label>
-        {/* --- Adjusted Preview Size --- */}
-        <div className="relative glass-card bg-black/10 border border-white/15 rounded-lg h-72 md:h-80 flex items-center justify-center overflow-hidden shadow-inner p-2"> {/* Fixed height */}
+        <div className="relative glass-card bg-black/10 border border-white/15 rounded-lg h-72 md:h-80 flex items-center justify-center overflow-hidden shadow-inner p-2">
           <AnimatePresence mode="wait">
             {previewStatus === 'pending' || previewStatus === 'processing' ? (
               <motion.div
@@ -215,9 +232,9 @@ export function MediaGenerationForm({
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
                 transition={{ duration: 0.3 }}
-                className="text-center p-4 flex flex-col items-center justify-center absolute inset-0 bg-black/40 backdrop-blur-md rounded-lg" // Darker blur
+                className="text-center p-4 flex flex-col items-center justify-center absolute inset-0 bg-black/40 backdrop-blur-md rounded-lg"
               >
-                <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" /> {/* Larger spinner */}
+                <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
                 <p className="text-base font-medium text-foreground">Generating your {mediaType}...</p>
                 <p className="text-sm text-muted-foreground mt-1">Monitoring status...</p>
               </motion.div>
@@ -227,9 +244,17 @@ export function MediaGenerationForm({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.5 }}
-                className="relative w-full h-full" // Image container takes full space
+                className="relative w-full h-full"
               >
-                <Image src={previewUrl} alt={prompt || "Generated Media"} fill className="object-contain rounded-md" unoptimized={true} /> {/* Added rounded-md */}
+                {/* Render Image or Video based on mediaType */}
+                {mediaType === 'image' ? (
+                   <Image src={previewUrl} alt={prompt || "Generated Image"} fill className="object-contain rounded-md" unoptimized={true} />
+                ) : (
+                   // Assuming video outputs are webp and can be displayed as images for preview
+                   <Image src={previewUrl} alt={prompt || "Generated Video Preview"} fill className="object-contain rounded-md" unoptimized={true} />
+                   // If you need actual video playback in preview, you'd use a <video> tag here
+                )}
+
               </motion.div>
             ) : previewStatus === 'failed' ? (
               <motion.div
@@ -238,9 +263,9 @@ export function MediaGenerationForm({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
                 transition={{ duration: 0.3 }}
-                className="text-center p-4 flex flex-col items-center justify-center absolute inset-0 bg-destructive/20 backdrop-blur-sm rounded-lg" // Destructive bg
+                className="text-center p-4 flex flex-col items-center justify-center absolute inset-0 bg-destructive/20 backdrop-blur-sm rounded-lg"
               >
-                <AlertCircle className="h-12 w-12 text-destructive-foreground mb-4" /> {/* Larger icon */}
+                <AlertCircle className="h-12 w-12 text-destructive-foreground mb-4" />
                 <p className="text-base font-medium text-destructive-foreground">Generation failed.</p>
                 <p className="text-sm text-destructive-foreground/80 mt-1">Check library or try again.</p>
               </motion.div>
@@ -252,7 +277,6 @@ export function MediaGenerationForm({
                 transition={{ duration: 0.3 }}
                 className="text-center p-4 flex flex-col items-center justify-center text-muted-foreground"
               >
-                 {/* Slightly larger icon/text for idle */}
                 <div className="rounded-full bg-primary/10 p-5 w-fit mx-auto mb-5 border border-primary/20 shadow-sm">
                   {mediaType === 'image' ? <LucideImage className="h-10 w-10 text-primary/80" /> : <Film className="h-10 w-10 text-primary/80" />}
                 </div>
