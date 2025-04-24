@@ -1,19 +1,15 @@
 // src/components/dashboard/media-generation-form.tsx
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, ImageIcon, VideoIcon, AlertCircle, Image as LucideImage, Film, Sparkles, Info } from 'lucide-react';
-// Import the server action to START generation
-import { generateMedia } from '@/lib/actions/media.actions';
+import { Loader2, AlertCircle, Image as LucideImage, Film, Sparkles } from 'lucide-react';
+import { generateMedia, checkMediaStatus } from '@/lib/actions/media.actions';
 import { toast } from 'sonner';
 import Image from 'next/image';
 import { MediaType } from '@/lib/constants/media';
 import { motion, AnimatePresence } from 'framer-motion';
-import { createClient } from '@/lib/supabase/client'; // Import client for Realtime
-import { RealtimeChannel } from '@supabase/supabase-js'; // Import RealtimeChannel type
-import { GeneratedMedia } from '@/types/db_types'; // Import GeneratedMedia type
 
 interface MediaGenerationFormProps {
   mediaType: MediaType;
@@ -29,36 +25,112 @@ export function MediaGenerationForm({
   onGenerationStart
 }: MediaGenerationFormProps) {
   const [prompt, setPrompt] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false); // Tracks initial submission
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPolling, setIsPolling] = useState(false); // Track active polling state
+  const [pollingMediaId, setPollingMediaId] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewStatus, setPreviewStatus] = useState<'idle' | 'pending' | 'processing' | 'completed' | 'failed'>('idle');
-
-  // Ref to store the Realtime channel instance
-  const channelRef = useRef<RealtimeChannel | null>(null);
-  // Ref to store the ID of the media item we are currently subscribed to
-  const subscribedMediaIdRef = useRef<string | null>(null);
-
-  // Get Supabase client instance
-  const supabase = createClient();
-
-  // Function to unsubscribe from Realtime channel
-  const unsubscribeFromRealtime = useCallback(() => {
-    if (channelRef.current) {
-      console.log(`Form (${mediaType}): Unsubscribing from channel for media ${subscribedMediaIdRef.current}`);
-      supabase.removeChannel(channelRef.current)
-        .catch(err => console.error("Error removing channel:", err));
-      channelRef.current = null;
-      subscribedMediaIdRef.current = null;
+  
+  // Use a ref to track polling timeouts
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Define the polling function
+  const pollMediaStatus = async (mediaId: string) => {
+    if (!mediaId) return;
+    
+    console.log(`Polling status for media ${mediaId}...`);
+    setIsPolling(true); // Set polling state to true when polling starts
+    
+    try {
+      const result = await checkMediaStatus(mediaId);
+      console.log(`Poll result for ${mediaId}:`, result);
+      
+      setPreviewStatus(result.status as typeof previewStatus);
+      
+      if (result.status === 'completed') {
+        console.log(`Generation completed for ${mediaId}`);
+        setPreviewUrl(result.mediaUrl || null);
+        toast.success(`${mediaType} generation complete!`);
+        // Stop polling on completion
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+        setIsPolling(false); // End polling state when complete
+      } else if (result.status === 'failed') {
+        console.log(`Generation failed for ${mediaId}`);
+        toast.error(`Generation failed: ${result.error || 'Unknown reason'}`);
+        // Stop polling on failure
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+        setIsPolling(false); // End polling state when failed
+      } else {
+        console.log(`Status is ${result.status}, continuing poll in 5 seconds...`);
+        // Continue polling after 5 seconds
+        timeoutRef.current = setTimeout(() => pollMediaStatus(mediaId), 5000);
+      }
+    } catch (error) {
+      console.error(`Error polling status:`, error);
+      toast.error("Error checking status");
+      // We don't stop polling on error, we'll try again
+      timeoutRef.current = setTimeout(() => pollMediaStatus(mediaId), 5000);
     }
-  }, [supabase, mediaType]);
-
-  // Cleanup Realtime subscription on unmount or when starting a new generation
+  };
+  
+  // Effect to start polling when media ID changes
+  useEffect(() => {
+    // Clear any existing timeout when dependencies change
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    
+    // Start polling if we have a media ID
+    if (pollingMediaId) {
+      console.log(`Starting initial poll for media ${pollingMediaId}`);
+      setIsPolling(true); // Set polling flag when we start
+      // Start immediately
+      pollMediaStatus(pollingMediaId);
+    } else {
+      setIsPolling(false); // Clear polling flag when no media ID
+    }
+    
+    // Cleanup function to clear timeout when component unmounts or dependencies change
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, [pollingMediaId]); // Only re-run when pollingMediaId changes
+  
+  // Reset when prompt changes
+  useEffect(() => {
+    if (prompt && pollingMediaId) {
+      setPollingMediaId(null);
+      setPreviewStatus('idle');
+      setPreviewUrl(null);
+      setIsPolling(false);
+      
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    }
+  }, [prompt, pollingMediaId]);
+  
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      unsubscribeFromRealtime();
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      setIsPolling(false);
     };
-  }, [unsubscribeFromRealtime]);
-
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -68,104 +140,52 @@ export function MediaGenerationForm({
 
     setIsSubmitting(true);
     setPreviewUrl(null);
-    setPreviewStatus('pending'); // Set initial status immediately
+    setPreviewStatus('pending');
+    
+    // Clear any existing polling
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    setPollingMediaId(null);
+    setIsPolling(false);
 
-    // Unsubscribe from any previous Realtime channel before starting a new one
-    unsubscribeFromRealtime();
-
-    console.log(`Form (${mediaType}): Submitting generation request...`);
+    console.log(`Starting generation for ${mediaType}...`);
 
     try {
-      const formData: FormData = new FormData();
+      const formData = new FormData();
       formData.append('prompt', prompt);
       formData.append('mediaType', mediaType);
 
-      // Call the server action to initiate generation (deducts credits, creates DB record, invokes Edge Function)
-      // This action should return quickly with the mediaId
       const result = await generateMedia(formData);
-      console.log(`Form (${mediaType}): generateMedia action result:`, result);
+      console.log(`Generation result:`, result);
 
       if (!result.success || !result.mediaId) {
         toast.error(result.error || 'Failed to start generation');
-        setPreviewStatus('failed'); // Mark as failed if the initial action fails
+        setPreviewStatus('failed');
+        setIsPolling(false);
       } else {
-        toast.info(`Your ${mediaType} generation has started! Monitoring status...`);
-        const newMediaId = result.mediaId;
-
-        // Store the ID we are now monitoring
-        subscribedMediaIdRef.current = newMediaId;
-
-        // Set up Realtime subscription for this specific media item
-        channelRef.current = supabase
-          .channel(`media_update_${newMediaId}`) // Use a unique channel name for this item
-          .on<GeneratedMedia>(
-            'postgres_changes',
-            {
-              event: 'UPDATE', // Only listen for UPDATE events
-              schema: 'public',
-              table: 'generated_media',
-              filter: `id=eq.${newMediaId}` // Filter for the specific media ID
-            },
-            (payload) => {
-              console.log(`Form (${mediaType}): Realtime update for ${newMediaId}:`, payload);
-              const updatedMedia = payload.new as GeneratedMedia; // Get the updated record
-
-              // Update state based on the Realtime payload
-              setPreviewStatus(updatedMedia.status as typeof previewStatus);
-              setPreviewUrl(updatedMedia.media_url || null);
-
-              // If status is completed or failed, unsubscribe
-              if (updatedMedia.status === 'completed') {
-                toast.success(`Preview updated: ${mediaType} ready!`);
-                unsubscribeFromRealtime(); // Stop listening
-              } else if (updatedMedia.status === 'failed') {
-                unsubscribeFromRealtime(); // Stop listening
-              }
-            }
-          )
-          .subscribe((status, err) => {
-             if (status === 'SUBSCRIBED') {
-                console.log(`Form (${mediaType}): Realtime channel SUBSCRIBED for media ${newMediaId}`);
-             }
-             if (status === 'CHANNEL_ERROR') {
-                console.error(`Form (${mediaType}): Realtime channel error for ${newMediaId}:`, err);
-                toast.error('Realtime connection error. Preview might not update.');
-                setPreviewStatus('failed'); // Indicate failure if Realtime fails
-                unsubscribeFromRealtime();
-             }
-             if (status === 'TIMED_OUT') {
-                 console.warn(`Form (${mediaType}): Realtime connection timed out for ${newMediaId}.`);
-                 // Optionally handle timeout, maybe switch to polling or show warning
-             }
-          });
-
-
-        // Notify parent (MediaLibrary) about the new item so it can add it to the list
+        toast.info(`Your ${mediaType} generation has started! Checking status every 5 seconds...`);
+        // This will trigger the polling effect
+        setPollingMediaId(result.mediaId);
+        setIsPolling(true);
+        
         if (onGenerationStart) {
-          onGenerationStart(newMediaId);
+          onGenerationStart(result.mediaId);
         }
       }
     } catch (error: any) {
-      console.error(`Form (${mediaType}): Error during submission:`, error);
-      toast.error('An unexpected error occurred during submission');
-      setPreviewStatus('failed'); // Mark as failed on unexpected error
-      unsubscribeFromRealtime(); // Ensure we clean up if submission fails
+      console.error(`Submission error:`, error);
+      toast.error('An unexpected error occurred');
+      setPreviewStatus('failed');
+      setIsPolling(false);
     } finally {
-       // Set submitting false once the initial request is done, Realtime handles subsequent states
-       setIsSubmitting(false);
+      setIsSubmitting(false);
     }
   }
 
-  // Reset preview if prompt changes or media type changes (e.g., switching tabs)
-  useEffect(() => {
-    setPreviewStatus('idle');
-    setPreviewUrl(null);
-    // Unsubscribe from any active channel when inputs change
-    unsubscribeFromRealtime();
-  }, [prompt, mediaType, unsubscribeFromRealtime]); // Depend on prompt and mediaType
-
-  // Determine if the form is effectively in a loading state
-  const isLoading = isSubmitting || previewStatus === 'processing' || previewStatus === 'pending';
+  // Use both isSubmitting, isPolling, and status to determine if we're in a loading state
+  const isLoading = isSubmitting || isPolling || previewStatus === 'processing' || previewStatus === 'pending';
 
   return (
     <div className="grid md:grid-cols-2 gap-8 items-start">
@@ -199,7 +219,7 @@ export function MediaGenerationForm({
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                {isSubmitting ? 'Starting...' : (previewStatus === 'pending' ? 'Pending...' : 'Processing...')}
+                {isSubmitting ? 'Starting...' : (isPolling ? 'Generating...' : 'Processing...')}
               </>
             ) : (
               <>
@@ -209,7 +229,8 @@ export function MediaGenerationForm({
             )}
           </Button>
         </form>
-        {/* Enhanced Credit Info */}
+        
+        {/* Credit Info */}
         <div className="text-base text-muted-foreground border-t border-white/15 pt-4 space-y-1 bg-white/5 p-4 rounded-lg shadow-inner">
           <p><span className="font-semibold text-foreground/95">Cost:</span> <span className="text-primary font-medium">{creditCost}</span> credits</p>
           <p><span className="font-semibold text-foreground/95">Available:</span> <span className="text-primary font-medium">{userCredits.toLocaleString()}</span> credits</p>
@@ -231,7 +252,7 @@ export function MediaGenerationForm({
         </label>
         <div className="relative glass-card bg-black/10 border border-white/15 rounded-lg h-72 md:h-80 flex items-center justify-center overflow-hidden shadow-inner p-2">
           <AnimatePresence mode="wait">
-            {previewStatus === 'pending' || previewStatus === 'processing' ? (
+            {isLoading && (previewStatus === 'pending' || previewStatus === 'processing' || isPolling) ? (
               <motion.div
                 key="loading"
                 initial={{ opacity: 0, scale: 0.9 }}
@@ -242,7 +263,7 @@ export function MediaGenerationForm({
               >
                 <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
                 <p className="text-base font-medium text-foreground">Generating your {mediaType}...</p>
-                <p className="text-sm text-muted-foreground mt-1">Monitoring status...</p>
+                <p className="text-sm text-muted-foreground mt-1">Checking status every 5 seconds...</p>
               </motion.div>
             ) : previewStatus === 'completed' && previewUrl ? (
               <motion.div
@@ -252,15 +273,7 @@ export function MediaGenerationForm({
                 transition={{ duration: 0.5 }}
                 className="relative w-full h-full"
               >
-                {/* Render Image or Video based on mediaType */}
-                {mediaType === 'image' ? (
-                   <Image src={previewUrl} alt={prompt || "Generated Image"} fill className="object-contain rounded-md" unoptimized={true} />
-                ) : (
-                   // Assuming video outputs are webp and can be displayed as images for preview
-                   // If you need actual video playback in preview, you'd use a <video> tag here
-                   <Image src={previewUrl} alt={prompt || "Generated Video Preview"} fill className="object-contain rounded-md" unoptimized={true} />
-                )}
-
+                <Image src={previewUrl} alt={prompt || "Generated Media"} fill className="object-contain rounded-md" unoptimized={true} />
               </motion.div>
             ) : previewStatus === 'failed' ? (
               <motion.div
@@ -275,7 +288,7 @@ export function MediaGenerationForm({
                 <p className="text-base font-medium text-destructive-foreground">Generation failed.</p>
                 <p className="text-sm text-destructive-foreground/80 mt-1">Check library or try again.</p>
               </motion.div>
-            ) : ( // 'idle' state
+            ) : (
               <motion.div
                 key="idle"
                 initial={{ opacity: 0 }}
