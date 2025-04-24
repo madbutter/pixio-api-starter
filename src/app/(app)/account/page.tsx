@@ -14,7 +14,7 @@ import { ManageSubscriptionButton } from '@/components/account/manage-subscripti
 import { getUserCredits } from '@/lib/credits';
 import { CREDIT_PACKS } from '@/lib/config/pricing';
 import { CreditPackCard } from '@/components/account/credit-pack-card';
-import { User as UserIcon, CreditCard, Zap, Wallet } from 'lucide-react'; // Added icons
+import { User as UserIcon, CreditCard, Zap, Wallet } from 'lucide-react';
 
 export default async function AccountPage() {
   const supabase = await createClient();
@@ -43,9 +43,16 @@ export default async function AccountPage() {
   const subscription = subscriptionResult; // Already includes nested data
   const userCredits = userCreditsResult;
   const creditUsage = creditUsageResult.data;
+  
+  // Convert dates to ISO strings to avoid hydration mismatches
+  const safeUsage = creditUsage?.map(usage => ({
+    ...usage,
+    // Convert dates to ISO strings to ensure serialization
+    created_at: new Date(usage.created_at).toISOString()
+  }));
 
   return (
-    <div className="container mx-auto px-4 py-10 space-y-10"> {/* Consistent padding and spacing */}
+    <div className="container mx-auto px-4 py-10 space-y-10"> 
       {/* Client component to handle URL parameters and show toast */}
       <SuccessToastWrapper />
 
@@ -63,7 +70,7 @@ export default async function AccountPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
 
         {/* Main Content Column (Profile, Credits, Security) */}
-        <div className="md:col-span-2 space-y-8"> {/* Increased spacing */}
+        <div className="md:col-span-2 space-y-8">
 
           {/* Profile Card */}
           <Card className="glass-card border border-white/15 shadow-xl overflow-hidden">
@@ -96,39 +103,39 @@ export default async function AccountPage() {
                   </CardDescription>
                </div>
             </CardHeader>
-            <CardContent className="space-y-6 pt-6"> {/* Increased spacing */}
+            <CardContent className="space-y-6 pt-6">
               <div className="flex justify-between items-center">
                 <div>
-                  <h3 className="font-semibold text-lg text-foreground/95">Total Credits Available</h3> {/* Larger text */}
-                  <p className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary inline-block">{userCredits.total.toLocaleString()}</p> {/* Larger, gradient text */}
+                  <h3 className="font-semibold text-lg text-foreground/95">Total Credits Available</h3>
+                  <p className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary inline-block">{userCredits.total.toLocaleString()}</p>
                 </div>
               </div>
 
-              <Separator className="bg-white/15" /> {/* Glassy separator */}
+              <Separator className="bg-white/15" />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6"> {/* Responsive grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div>
-                  <h3 className="font-medium text-foreground/95 text-lg">Subscription Credits</h3> {/* Larger text */}
-                  <p className="text-xl text-primary font-bold">{userCredits.subscriptionCredits.toLocaleString()}</p> {/* Larger, colored text */}
+                  <h3 className="font-medium text-foreground/95 text-lg">Subscription Credits</h3>
+                  <p className="text-xl text-primary font-bold">{userCredits.subscriptionCredits.toLocaleString()}</p>
                   <p className="text-sm text-muted-foreground mt-1">Refreshes monthly based on your plan</p>
                 </div>
                 <div>
-                  <h3 className="font-medium text-foreground/95 text-lg">Purchased Credits</h3> {/* Larger text */}
-                  <p className="text-xl text-accent/90 font-bold">{userCredits.purchasedCredits.toLocaleString()}</p> {/* Larger, colored text */}
+                  <h3 className="font-medium text-foreground/95 text-lg">Purchased Credits</h3>
+                  <p className="text-xl text-accent/90 font-bold">{userCredits.purchasedCredits.toLocaleString()}</p>
                   <p className="text-sm text-muted-foreground mt-1">Never expires</p>
                 </div>
               </div>
 
-              {creditUsage && creditUsage.length > 0 && (
+              {safeUsage && safeUsage.length > 0 && (
                 <>
-                  <Separator className="bg-white/15" /> {/* Glassy separator */}
+                  <Separator className="bg-white/15" />
                   <div>
-                    <h3 className="font-semibold text-lg mb-3 text-foreground/95">Recent Usage</h3> {/* Larger text */}
-                    <div className="space-y-3 max-h-40 overflow-y-auto pr-2 styled-scrollbars"> {/* Added max height and scrollbar class */}
-                      {creditUsage.map((usage) => (
-                        <div key={usage.id} className="flex justify-between items-center text-sm text-foreground/80 border-b border-white/5 pb-2 last:border-b-0"> {/* Added subtle border */}
+                    <h3 className="font-semibold text-lg mb-3 text-foreground/95">Recent Usage</h3>
+                    <div className="space-y-3 max-h-40 overflow-y-auto pr-2 styled-scrollbars">
+                      {safeUsage.map((usage) => (
+                        <div key={usage.id} className="flex justify-between items-center text-sm text-foreground/80 border-b border-white/5 pb-2 last:border-b-0">
                           <span>{usage.description || 'Credit usage'}</span>
-                          <span className="font-medium text-destructive/80 shrink-0">-{usage.amount}</span> {/* Styled usage amount */}
+                          <span className="font-medium text-destructive/80 shrink-0">-{usage.amount}</span>
                         </div>
                       ))}
                     </div>
@@ -138,7 +145,7 @@ export default async function AccountPage() {
             </CardContent>
           </Card>
 
-          {/* Purchase Credits Card */}
+          {/* Purchase Credits Card - Use client component for each card */}
           <Card className="glass-card border border-white/15 shadow-xl overflow-hidden">
             <CardHeader className="pb-4 border-b border-white/15 bg-gradient-to-b from-white/5 to-transparent flex flex-row items-center gap-4">
                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-secondary/30 to-accent/30 flex items-center justify-center border border-white/15 shadow-inner">
@@ -152,24 +159,18 @@ export default async function AccountPage() {
                </div>
             </CardHeader>
             <CardContent className="pt-6">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6"> {/* Adjusted grid for smaller screens */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 {CREDIT_PACKS.map((pack) => (
-                  // CreditPackCard is now a client component and styled internally
                   <CreditPackCard key={pack.id} creditPack={pack} />
                 ))}
               </div>
             </CardContent>
           </Card>
-
-           {/* Account Security Card (Optional - can be combined or kept separate) */}
-           {/* Keeping it simple for now, focusing on Profile/Credits/Subscription */}
-           {/* If needed, add a similar Card structure here */}
-
         </div>
 
         {/* Subscription Card Column */}
         <div>
-          <Card className="glass-card border border-white/15 shadow-xl overflow-hidden sticky top-24"> {/* Added sticky positioning */}
+          <Card className="glass-card border border-white/15 shadow-xl overflow-hidden sticky top-24">
             <CardHeader className="pb-4 border-b border-white/15 bg-gradient-to-b from-white/5 to-transparent flex flex-row items-center gap-4">
                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-secondary/30 to-primary/30 flex items-center justify-center border border-white/15 shadow-inner">
                   <Zap className="w-6 h-6 text-secondary-foreground" />
@@ -181,47 +182,46 @@ export default async function AccountPage() {
                   </CardDescription>
                </div>
             </CardHeader>
-            <CardContent className="space-y-6 pt-6"> {/* Increased spacing */}
+            <CardContent className="space-y-6 pt-6">
               {subscription ? (
                 <>
                   <div>
-                    <h3 className="font-semibold text-lg text-foreground/95">Current Plan</h3> {/* Larger text */}
-                    {/* Use optional chaining for safety */}
-                    <p className="text-2xl font-bold text-primary">{subscription.prices?.products?.name || 'Unknown Plan'}</p> {/* Larger text */}
-                    <p className="text-base text-muted-foreground mt-1"> {/* Larger text */}
+                    <h3 className="font-semibold text-lg text-foreground/95">Current Plan</h3>
+                    {/* Use optional chaining and nullish coalescing for safety */}
+                    <p className="text-2xl font-bold text-primary">{subscription.prices?.products?.name || 'Unknown Plan'}</p>
+                    <p className="text-base text-muted-foreground mt-1">
                       {subscription.prices?.unit_amount ? formatPrice(subscription.prices.unit_amount) : '$0.00'}
                       / {subscription.prices?.interval || 'month'}
                     </p>
                   </div>
 
-                  <Separator className="bg-white/15" /> {/* Glassy separator */}
+                  <Separator className="bg-white/15" />
 
                   <div>
-                    <h3 className="font-semibold text-lg text-foreground/95">Status</h3> {/* Larger text */}
-                    <div className="flex items-center gap-2 mt-2"> {/* Increased gap */}
+                    <h3 className="font-semibold text-lg text-foreground/95">Status</h3>
+                    <div className="flex items-center gap-2 mt-2">
                       <div className={`w-3 h-3 rounded-full ${
                         subscription.status === 'active' ? 'bg-green-500' :
                         subscription.status === 'trialing' ? 'bg-blue-500' : 'bg-red-500'
                       }`}></div>
-                      <p className="capitalize text-base text-foreground/95">{subscription.status}</p> {/* Larger text */}
+                      <p className="capitalize text-base text-foreground/95">{subscription.status}</p>
                     </div>
                   </div>
 
-                   <Separator className="bg-white/15" /> {/* Glassy separator */}
+                   <Separator className="bg-white/15" />
 
-                   {/* Manage Subscription Button */}
-                   {/* ManageSubscriptionButton is now a client component and styled internally */}
+                   {/* Manage Subscription Button - Client Component */}
                    <ManageSubscriptionButton />
 
                 </>
               ) : (
                 <>
-                  <div className="text-center py-4 space-y-4"> {/* Increased spacing */}
-                    <h3 className="font-semibold text-lg text-foreground/95">Free Plan</h3> {/* Larger text */}
-                    <p className="text-base text-muted-foreground"> {/* Larger text */}
+                  <div className="text-center py-4 space-y-4">
+                    <h3 className="font-semibold text-lg text-foreground/95">Free Plan</h3>
+                    <p className="text-base text-muted-foreground">
                       You are currently on our free plan with limited features.
                     </p>
-                    <Button asChild className="w-full glass-button bg-gradient-to-r from-primary to-secondary text-white hover:opacity-95 hover:shadow-lg transition-all duration-300 shadow-md text-lg py-3 font-semibold"> {/* Styled button */}
+                    <Button asChild className="w-full glass-button bg-gradient-to-r from-primary to-secondary text-white hover:opacity-95 hover:shadow-lg transition-all duration-300 shadow-md text-lg py-3 font-semibold">
                       <Link href="/pricing">Upgrade Plan</Link>
                     </Button>
                   </div>
