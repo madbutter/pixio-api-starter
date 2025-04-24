@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, ImageIcon, VideoIcon, AlertCircle, Image as LucideImage, Film, Sparkles, Info } from 'lucide-react';
 // Import the server actions
-import { generateMedia, checkMediaStatus } from '@/lib/actions/media.actions';
+import { generateMedia, pollMediaStatus } from '@/lib/actions/media.actions'; // Import pollMediaStatus
 import { toast } from 'sonner';
 import Image from 'next/image';
 import { MediaType } from '@/lib/constants/media';
@@ -61,14 +61,15 @@ export function MediaGenerationForm({
 
     console.log(`Form (${mediaType}): Polling DB status for ${mediaId}...`);
     try {
-      // Call the server action which NOW ONLY reads the DB
-      const result = await checkMediaStatus(mediaId);
+      // Call the new server action which ONLY reads the DB
+      const result = await pollMediaStatus(mediaId);
       console.log(`Form (${mediaType}): Poll result from DB for ${mediaId}:`, result);
 
       setPreviewStatus(result.status as typeof previewStatus);
+      setPreviewUrl(result.mediaUrl || null); // Always update previewUrl
 
+      // Stop polling if status is final (completed or failed)
       if (result.status === 'completed') {
-        setPreviewUrl(result.mediaUrl || null);
         toast.success(`Preview updated: ${mediaType} ready!`);
         stopPolling("completed");
       } else if (result.status === 'failed') {
@@ -118,7 +119,9 @@ export function MediaGenerationForm({
     console.log(`Form (${mediaType}): Submitting generation request...`);
 
     try {
-      const formData = new FormData();
+      // Explicitly type formData here
+      const formData: FormData = new FormData();
+
       formData.append('prompt', prompt);
       formData.append('mediaType', mediaType);
 
@@ -251,8 +254,8 @@ export function MediaGenerationForm({
                    <Image src={previewUrl} alt={prompt || "Generated Image"} fill className="object-contain rounded-md" unoptimized={true} />
                 ) : (
                    // Assuming video outputs are webp and can be displayed as images for preview
-                   <Image src={previewUrl} alt={prompt || "Generated Video Preview"} fill className="object-contain rounded-md" unoptimized={true} />
                    // If you need actual video playback in preview, you'd use a <video> tag here
+                   <Image src={previewUrl} alt={prompt || "Generated Video Preview"} fill className="object-contain rounded-md" unoptimized={true} />
                 )}
 
               </motion.div>

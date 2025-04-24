@@ -12,7 +12,8 @@ import { GeneratedMedia } from '@/types/db_types';
 import { supabaseAdmin } from '@/lib/supabase/admin'; // Use admin for reliable reads/updates
 
 /**
- * Initiates media generation by creating a record and invoking the Supabase Function.
+ * Initiates media generation by deducting credits, creating a pending record,
+ * and asynchronously invoking the Supabase Function.
  * Returns the ID of the pending record immediately.
  */
 export async function generateMedia(formData: FormData): Promise<{
@@ -80,11 +81,11 @@ export async function generateMedia(formData: FormData): Promise<{
     // 3. Invoke the Supabase Function asynchronously
     // The function will handle triggering ComfyDeploy and updating the DB record.
     // We do NOT wait for the function to complete here.
+    // Pass the user's JWT so the function can authenticate as the user for RLS/ownership checks
     const { data: functionData, error: functionError } = await supabase.functions.invoke(
       'generate-media-handler', // Name of your deployed function
       {
         body: { prompt, mediaType, mediaId, userId: user.id }, // Pass necessary data including userId
-        // Pass the user's JWT so the function can authenticate as the user
       }
     );
 
@@ -95,7 +96,7 @@ export async function generateMedia(formData: FormData): Promise<{
         .from('generated_media')
         .update({ status: 'failed', metadata: { error: `Function invocation failed: ${functionError.message}` } })
         .eq('id', mediaId);
-      // TODO: Consider refunding credits here
+      // TODO: Consider refunding credits here if function invocation fails
       return { success: false, error: `Failed to start generation process: ${functionError.message}` };
     }
 
@@ -118,12 +119,13 @@ export async function generateMedia(formData: FormData): Promise<{
 
 
 /**
- * Server action called by the frontend form to poll the status of a specific media generation
- * by reading the record directly from the database.
+ * Server action called by the frontend component to poll the status of a specific
+ * media generation by READING the record directly from the database.
+ * This action should be fast as it only queries the DB.
  */
-export async function checkMediaStatus(mediaId: string): Promise<GenerationResult> {
+export async function pollMediaStatus(mediaId: string): Promise<GenerationResult> {
   if (!mediaId) {
-    console.error("checkMediaStatus: Media ID is required");
+    console.error("pollMediaStatus: Media ID is required");
     return { success: false, error: "Media ID is required", status: 'failed' };
   }
 
@@ -131,14 +133,14 @@ export async function checkMediaStatus(mediaId: string): Promise<GenerationResul
   const { data: { user }, error: userError } = await supabase.auth.getUser();
 
   if (!user || userError) {
-    console.error("checkMediaStatus: Authentication error for user", userError);
+    console.error("pollMediaStatus: Authentication error for user", userError);
     return { success: false, error: 'Authentication error', status: 'failed' };
   }
 
-  console.log(`checkMediaStatus: Fetching status for mediaId: ${mediaId} for user ${user.id}`);
+  // console.log(`pollMediaStatus: Fetching status for mediaId: ${mediaId} for user ${user.id}`); // Avoid excessive logging
 
   try {
-    // Fetch the record using the user's client (RLS should allow this)
+    // Fetch the record using the user's client (RLS should allow this).
     // We are ONLY reading the database here. The Edge Function updates it.
     const { data: mediaRecord, error: fetchError } = await supabase
       .from('generated_media')
@@ -148,12 +150,13 @@ export async function checkMediaStatus(mediaId: string): Promise<GenerationResul
       .single();
 
     if (fetchError || !mediaRecord) {
-      console.error(`checkMediaStatus: Error fetching media record ${mediaId} or not found for user ${user.id}:`, fetchError);
-      // Return failed status if record isn't found or owned by user
+      // This could happen if the record was somehow deleted or doesn't belong to the user.
+      // Treat this as a failure for the polling process.
+      console.error(`pollMediaStatus: Error fetching media record ${mediaId} or not found for user ${user.id}:`, fetchError);
       return { success: false, error: `Media record not found or unauthorized: ${fetchError?.message}`, status: 'failed' };
     }
 
-    console.log(`checkMediaStatus: Status for ${mediaId} from DB: ${mediaRecord.status}`);
+    // console.log(`pollMediaStatus: Status for ${mediaId} from DB: ${mediaRecord.status}`); // Avoid excessive logging
 
     // Return the status and URL directly from the database record
     const metadata = mediaRecord.metadata as any; // Type assertion
@@ -166,8 +169,8 @@ export async function checkMediaStatus(mediaId: string): Promise<GenerationResul
     };
 
   } catch (error: any) {
-    console.error(`checkMediaStatus: Unexpected error for ${mediaId}:`, error);
-    // Return failed status if the action itself encounters an error
+    console.error(`pollMediaStatus: Unexpected error for ${mediaId}:`, error);
+    // Return failed status if the action itself encounters an unexpected error
     return { success: false, error: error.message, status: 'failed' };
   }
 }
