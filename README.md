@@ -19,7 +19,7 @@ This project leverages modern technologies for a performant and developer-friend
 - **Frontend Framework**: [Next.js 15](https://nextjs.org/) with App Router and Server Components
 - **Authentication & Database**: [Supabase](https://supabase.io/)
 - **Payments & Subscriptions**: [Stripe](https://stripe.com/)
-- **AI Generation**: [ComfyUI](https://comfyui.com/) via [ComfyDeploy API](https://api.myapps.ai/)
+- **AI Generation**: [ComfyUI](https://comfyui.com/) via [Pixio API](https://api.myapps.ai/)
 - **UI Components**: [Shadcn UI](https://ui.shadcn.com/)
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/)
 - **Animation**: [Framer Motion](https://www.framer.com/motion/)
@@ -58,7 +58,7 @@ This section guides you through setting up the project locally after forking the
 - npm, yarn, or pnpm
 - A [Supabase](https://supabase.io/) account
 - A [Stripe](https://stripe.com/) account
-- A [ComfyDeploy](https://api.myapps.ai/) account (for AI generation)
+- A [Pixio API](https://api.myapps.ai/) account (for AI generation)
 - [Stripe CLI](https://stripe.com/docs/stripe-cli) (for local webhook testing)
 
 ### 1. Clone and Install
@@ -103,11 +103,11 @@ You'll set up your database, storage, and an Edge Function in the Supabase UI.
     *   Go to Edge Functions in your Supabase project dashboard.
     *   Click "New Function".
     *   Name it `generate-media-handler`.
-    *   Choose a region (preferably close to your ComfyDeploy region).
+    *   Choose a region .
     *   Click "Create function".
-    *   Go to the function's settings and add a **Secret** named `COMFY_DEPLOY_API_KEY` with your ComfyDeploy API key as the value.
+    *   Go to the function's settings and add a **Secret** named `COMFY_DEPLOY_API_KEY` with your Pixio API key as the value.
     *   Copy the code from the `supabase/functions/generate-media-handler/index.ts` block in the [Supabase Edge Function](#supabase-edge-function) section below and paste it into the function editor in the Supabase UI.
-    *   **Important:** Update the `DEPLOYMENT_IDS` object within the function code with your actual ComfyDeploy workflow IDs for image and video generation.
+    *   **Important:** Update the `DEPLOYMENT_IDS` object within the function code with your actual Pixio API workflow IDs for image and video generation.
     *   Deploy the function.
 5.  **Configure Authentication URLs:**
     *   Go to Authentication > URL Configuration.
@@ -140,7 +140,7 @@ You'll set up your products, prices, and webhooks in the Stripe UI.
 
 ### 4. Set up Environment Variables (.env.local)
 
-Create a `.env.local` file in the root of your project and add the following variables, using the keys and URLs you obtained from Supabase, Stripe, and ComfyDeploy.
+Create a `.env.local` file in the root of your project and add the following variables, using the keys and URLs you obtained from Supabase, Stripe, and Pixio API.
 
 ```dotenv
 # Supabase
@@ -162,8 +162,8 @@ NEXT_PUBLIC_STRIPE_PRICE_CREDIT_PACK_1000=price_your_1000_credits_price_id
 NEXT_PUBLIC_STRIPE_PRICE_CREDIT_PACK_2500=price_your_2500_credits_price_id
 NEXT_PUBLIC_STRIPE_PRICE_CREDIT_PACK_5000=price_your_5000_credits_price_id
 
-# ComfyDeploy API Key (from ComfyDeploy account)
-COMFY_DEPLOY_API_KEY=YOUR_COMFY_DEPLOY_API_KEY
+# Pixio API Key (from Pixio account)
+COMFY_DEPLOY_API_KEY=YOUR_PIXIO_API_KEY
 
 # Application URL (Important for redirects - use http://localhost:3000 for local)
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
@@ -191,7 +191,7 @@ yarn dev
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser. You should now have the application running locally with authentication, subscription, credit system, and AI generation capabilities connected to your Supabase, Stripe, and ComfyDeploy accounts!
+Open [http://localhost:3000](http://localhost:3000) in your browser. You should now have the application running locally with authentication, subscription, credit system, and AI generation capabilities connected to your Supabase, Stripe, and Pixio API accounts!
 
 </details>
 
@@ -801,19 +801,19 @@ You need a storage bucket to store the generated images and videos.
 
 ### 5. Create Supabase Edge Function
 
-This project uses a Supabase Edge Function to handle the asynchronous communication with the ComfyDeploy API. This offloads the potentially long-running polling process from your Next.js server and keeps your API key secure.
+This project uses a Supabase Edge Function to handle the asynchronous communication with the Pixio API. This offloads the potentially long-running polling process from your Next.js server and keeps your API key secure.
 
 1. Go to Edge Functions in your Supabase project dashboard.
 2. Click "New Function".
 3. Name the function `generate-media-handler`.
-4. Choose a region (closest to your ComfyDeploy deployment is best).
+4. Choose a region.
 5. Select "Deno" as the runtime (default).
 6. Click "Create function".
 7. Once created, navigate to the function's page.
 8. Click the "Link to GitHub" button to connect it to your repository (recommended for easier deployment updates).
 9. Add the `COMFY_DEPLOY_API_KEY` as a **Secret** in the function's settings. Go to the "Secrets" tab and add a new secret with the key `COMFY_DEPLOY_API_KEY` and the value from your `.env.local`.
 10. Copy the code from `supabase/functions/generate-media-handler/index.ts` (provided in the code block below) into the function editor in the Supabase UI.
-11. **Important:** Update the `DEPLOYMENT_IDS` object within the function code with your actual ComfyDeploy workflow IDs for image and video generation.
+11. **Important:** Update the `DEPLOYMENT_IDS` object within the function code with your actual Pixio API workflow IDs for image and video generation.
 12. Deploy the function.
 
 ```typescript
@@ -822,7 +822,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts'; // Assuming you have a _shared folder with cors.ts
 
-// Define your ComfyDeploy Deployment IDs here
+// Define your Pixio Deployment IDs here
 const DEPLOYMENT_IDS = {
   image: '8f96cb86-5cbb-4ad0-9837-8a79eeb5103a', // Replace with your Image Deployment ID
   video: 'd07cf1d5-412c-4270-b925-ffd6416abd1c'  // Replace with your Video Deployment ID
@@ -1033,7 +1033,7 @@ serve(async (req) => {
 
       console.log(`Downloading generated ${mediaRecord.media_type} from: ${remoteMediaUrl}`);
 
-      // Download the media from ComfyDeploy's CDN
+      // Download the media from Pixio's CDN
       const mediaResponse = await fetch(remoteMediaUrl, {
         method: 'GET',
         headers: {
@@ -1099,7 +1099,7 @@ serve(async (req) => {
           metadata: {
             ...finalOutput?.metadata || {}, // Keep existing metadata
             run_id,
-            original_url: remoteMediaUrl, // Store the original ComfyDeploy URL
+            original_url: remoteMediaUrl, // Store the original Pixio URL
             file_size: mediaBuffer.byteLength,
             completed_at: new Date().toISOString(),
           }
@@ -1515,11 +1515,11 @@ If users report issues with credits not being added after purchase or not resett
 <details>
 <summary>Adding Pixio API Deployments and Modalities</summary>
 
-The application supports generating different types of media (modalities) using ComfyUI workflows deployed via the ComfyDeploy API. This section explains how to add new modalities or update existing ones.
+The application supports generating different types of media (modalities) using ComfyUI workflows deployed via the Pixio API. This section explains how to add new modalities or update existing ones.
 
 ### Understanding Deployments and Modalities
 
-- **Deployment**: A specific ComfyUI workflow hosted on ComfyDeploy with a unique ID.
+- **Deployment**: A specific ComfyUI workflow hosted on Pixio API with a unique ID.
 - **Modality**: A type of media that can be generated (e.g., image, video, audio, 3D model).
 - **Credit Cost**: Each modality costs a different amount of credits to generate, based on the computational resources required.
 
@@ -1529,8 +1529,8 @@ The application supports generating different types of media (modalities) using 
    - Design your workflow for the specific generation task (e.g., a new image model, a different video technique, an audio generation workflow).
    - Test thoroughly in ComfyUI to ensure it produces the expected output files and format.
 
-2. **Deploy to ComfyDeploy**:
-   - Sign in to your [ComfyDeploy account](https://api.myapps.ai/).
+2. **Deploy to Pixio API**:
+   - Sign in to your [Pixio API account](https://api.myapps.ai/).
    - Upload or create your workflow deployment.
    - Note the **Deployment ID** assigned to your workflow. This ID is used to trigger the workflow via the API.
 
@@ -1596,7 +1596,7 @@ To fully integrate a new modality (e.g., 'audio'):
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
     import { corsHeaders } from '../_shared/cors.ts'; // Assuming you have a _shared folder with cors.ts
 
-    // Define your ComfyDeploy Deployment IDs here
+    // Define your Pixio API Deployment IDs here
     const DEPLOYMENT_IDS = {
       image: '8f96cb86-5cbb-4ad0-9837-8a79eeb5103a', // Replace with your Image Deployment ID
       video: 'd07cf1d5-412c-4270-b925-ffd6416abd1c'  // Replace with your Video Deployment ID
@@ -1829,7 +1829,7 @@ To fully integrate a new modality (e.g., 'audio'):
 
           console.log(`Downloading generated ${mediaRecord.media_type} from: ${remoteMediaUrl}`);
 
-          // Download the media from ComfyDeploy's CDN
+          // Download the media from Pixio's CDN
           const mediaResponse = await fetch(remoteMediaUrl, {
             method: 'GET',
             headers: {
@@ -1891,7 +1891,7 @@ To fully integrate a new modality (e.g., 'audio'):
               metadata: {
                 ...finalOutput?.metadata || {}, // Keep existing metadata
                 run_id,
-                original_url: remoteMediaUrl, // Store the original ComfyDeploy URL
+                original_url: remoteMediaUrl, // Store the original Pixio API URL
                 file_size: mediaBuffer.byteLength,
                 completed_at: new Date().toISOString(),
               }
@@ -2020,7 +2020,7 @@ By modifying `tailwind.config.ts` and `src/app/globals.css`, you can easily adju
 
 1. Push your code to a GitHub repository.
 2. Sign up for [Vercel](https://vercel.com) and import your repository.
-3. Set the environment variables in the Vercel dashboard. **Make sure to set ALL variables from your `.env.local`, including the Stripe price IDs and the ComfyDeploy API Key.**
+3. Set the environment variables in the Vercel dashboard. **Make sure to set ALL variables from your `.env.local`, including the Stripe price IDs and the Pixio API Key.**
 4. Deploy the project.
 
 After deployment, update your Supabase and Stripe configurations with your production URL:
@@ -2038,7 +2038,7 @@ After deployment, update your Supabase and Stripe configurations with your produ
 - [Stripe](https://stripe.com/)
 - [Shadcn UI](https://ui.shadcn.com/)
 - [ComfyUI](https://comfyui.com/)
-- [ComfyDeploy](https://api.myapps.ai/)
+- [Pixio API](https://api.myapps.ai/)
 - [Framer Motion](https://www.framer.com/motion/)
 
 </details>
