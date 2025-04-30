@@ -17,7 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { PRICING_TIERS, PricingTier, getTierByPriceId } from '@/lib/config/pricing';
-import { Check, ExternalLink, ArrowRight, Star, Sparkles, Zap } from 'lucide-react';
+import { Check, ExternalLink, ArrowRight, Star, Sparkles, Zap, Github } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
@@ -798,32 +798,39 @@ export default function LandingPage() {
             </motion.p>
 
             <motion.div
-              className="flex flex-col sm:flex-row gap-4 justify-center"
-              initial={mounted ? { opacity: 0 } : { opacity: 1 }}
-              animate={mounted ? { opacity: 1 } : {}}
-              transition={{ delay: 0.7, duration: 0.8 }}
-            >
-              <MagneticButton className="bg-gradient-to-r from-primary/90 to-secondary/90 hover:from-primary/95 hover:to-secondary/95 text-white rounded-md py-2 px-4 font-medium shadow-md hover:shadow-lg transition-shadow">
-                <Link href="https://api.myapps.ai" target="_blank" rel="noopener noreferrer" className="flex items-center">
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Visit Pixio API
-                </Link>
-              </MagneticButton>
+  className="flex flex-col sm:flex-row gap-4 justify-center"
+  initial={mounted ? { opacity: 0 } : { opacity: 1 }}
+  animate={mounted ? { opacity: 1 } : {}}
+  transition={{ delay: 0.7, duration: 0.8 }}
+>
+  <MagneticButton className="bg-gradient-to-r from-primary/90 to-secondary/90 hover:from-primary/95 hover:to-secondary/95 text-white rounded-md py-2 px-4 font-medium shadow-md hover:shadow-lg transition-shadow">
+    <Link href="https://api.myapps.ai" target="_blank" rel="noopener noreferrer" className="flex items-center">
+      <ExternalLink className="mr-2 h-4 w-4" />
+      Visit Pixio API
+    </Link>
+  </MagneticButton>
 
-              <MagneticButton
-                className="glass-button bg-white/10 hover:bg-white/20 text-foreground rounded-md py-2 px-4 font-medium"
-                onClick={() => {
-                  if (mounted) {
-                    const pricingSection = document.getElementById('pricing');
-                    if (pricingSection) {
-                      pricingSection.scrollIntoView({ behavior: 'smooth' });
-                    }
-                  }
-                }}
-              >
-                View Plans
-              </MagneticButton>
-            </motion.div>
+  <MagneticButton
+    className="glass-button bg-white/10 hover:bg-white/20 text-foreground rounded-md py-2 px-4 font-medium"
+    onClick={() => {
+      if (mounted) {
+        const pricingSection = document.getElementById('pricing');
+        if (pricingSection) {
+          pricingSection.scrollIntoView({ behavior: 'smooth' });
+        }
+      }
+    }}
+  >
+    View Plans
+  </MagneticButton>
+  
+  <MagneticButton className="glass-button bg-white/10 hover:bg-white/20 text-foreground rounded-md py-2 px-4 font-medium">
+    <Link href="https://github.com/afarhadi99/pixio-api-starter" target="_blank" rel="noopener noreferrer" className="flex items-center">
+      <Github className="mr-2 h-4 w-4" />
+      Fork Repo
+    </Link>
+  </MagneticButton>
+</motion.div>
           </motion.div>
         </div>
 
