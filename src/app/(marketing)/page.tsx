@@ -22,6 +22,7 @@ import { formatPrice } from '@/lib/utils';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 import { Subscription } from '@/types/db_types';
+import { Footer } from '@/components/shared/footer';
 
 // Define prop types for components
 interface WorkflowCardProps {
@@ -144,7 +145,7 @@ const AnimatedBackground = () => {
 
       {/* Grid pattern - only add mousemove effect after mount */}
       <div
-        className="absolute inset-0 bg-[url('/grid.svg')] bg-repeat opacity-10"
+        className="absolute inset-0 bg-[url('/grid.svg')] bg-[length:10px_10px] bg-repeat opacity-5"
         style={mounted ? {
           transform: `translateX(${mousePosition.x * -5}px) translateY(${mousePosition.y * -5}px)`,
           transition: "transform 1s cubic-bezier(0.075, 0.82, 0.165, 1)"
@@ -1216,9 +1217,13 @@ export default function LandingPage() {
                 </Link>
               </MagneticButton>
             </motion.div>
+            
           </motion.div>
+          
         </div>
+       
       </motion.section>
+      
     </>
   );
 }

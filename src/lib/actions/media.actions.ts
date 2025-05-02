@@ -4,18 +4,25 @@
 import { createClient } from '@/lib/supabase/server';
 import { useCredits } from '@/lib/credits';
 import { revalidatePath } from 'next/cache';
-// Import the SERVICE function, not the action itself recursively
-import { checkGenerationStatus as checkGenerationStatusService, getUserMedia } from '@/lib/services/media.service';
-import { MediaType, CREDIT_COSTS, GenerationResult } from '@/lib/constants/media';
-import { GeneratedMedia } from '@/types/db_types';
-import { supabaseAdmin } from '@/lib/supabase/admin'; // Use admin for reliable reads/updates
+// Import the service function, NOT the action itself recursively
+import { checkGenerationStatus as checkGenerationStatusService } from '@/lib/services/media.service';
+import { MediaType, CREDIT_COSTS, GenerationResult, GenerationMode } from '@/lib/constants/media';
+// Import the specific Insert type and GeneratedMedia type
+import { Database, GeneratedMedia } from '@/types/db_types';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+// Import only the necessary storage service functions (used by actions below)
+import { listUserFiles as listUserFilesService, deleteFile as deleteFileService } from '@/lib/storage/supabase-storage';
+
+// Define the specific type for insertion, derived from db_types.ts
+type GeneratedMediaInsert = Database['public']['Tables']['generated_media']['Insert'];
 
 /**
  * Initiates media generation by creating a record and invoking the Supabase Function.
+ * Expects image URLs for modes that require input images (client handles upload).
  */
 export async function generateMedia(formData: FormData): Promise<{
   success: boolean;
-  mediaId?: string; // Return the ID of the created record
+  mediaId?: string;
   error?: string;
 }> {
   const supabase = await createClient();
@@ -25,294 +32,269 @@ export async function generateMedia(formData: FormData): Promise<{
     return { success: false, error: 'Authentication error' };
   }
 
+  // --- Read data from FormData ---
   const prompt = formData.get('prompt') as string;
-  const mediaType = formData.get('mediaType') as MediaType;
+  const generationMode = formData.get('generationMode') as GenerationMode;
+  const mediaType = formData.get('mediaType') as MediaType; // Actual type being generated
 
-  if (!prompt || !mediaType) {
+  // Get URLs directly from FormData (sent by client after direct upload/selection)
+  const startImageUrl = formData.get('startImageUrl') as string | null;
+  const endImageUrl = formData.get('endImageUrl') as string | null;
+
+  // --- Validation ---
+  if (!prompt || !generationMode || !mediaType) {
     return { success: false, error: 'Missing required fields' };
   }
+  if (generationMode === 'firstLastFrameVideo') {
+    // Now just check if the URLs were provided
+    if (!startImageUrl) return { success: false, error: 'Missing start image URL' };
+    if (!endImageUrl) return { success: false, error: 'Missing end image URL' };
+  }
 
-  const creditCost = CREDIT_COSTS[mediaType];
+  const creditCost = CREDIT_COSTS[generationMode];
+  if (creditCost === undefined) {
+    return { success: false, error: 'Invalid generation mode' };
+  }
 
   try {
     // 1. Check and deduct credits
     const creditSuccess = await useCredits(
       user.id,
       creditCost,
-      `Generate ${mediaType}: "${prompt.slice(0, 30)}${prompt.length > 30 ? '...' : ''}"`
+      `Generate ${generationMode}: "${prompt.slice(0, 30)}${prompt.length > 30 ? '...' : ''}"`
     );
-
-    if (!creditSuccess) {
-      return { success: false, error: 'Not enough credits' };
-    }
-    console.log(`Credits deducted successfully for user ${user.id}`);
+    if (!creditSuccess) { return { success: false, error: 'Not enough credits' }; }
+    console.log(`[Action] Credits deducted successfully for user ${user.id}`);
 
     // 2. Create initial 'pending' record in DB
-    const { data: newMediaRecord, error: insertError } = await supabase
-      .from('generated_media')
-      .insert({
+    const insertPayload: GeneratedMediaInsert = {
         user_id: user.id,
         prompt: prompt,
         media_type: mediaType,
         credits_used: creditCost,
         status: 'pending',
-        media_url: '', // Initialize empty
-        storage_path: '' // Initialize empty
-      })
-      .select('id') // Select only the ID
-      .single();
-
+        media_url: '', // Required by Insert type
+        storage_path: '', // Required by Insert type
+        metadata: { generationMode } // Store UI mode
+    };
+    if (generationMode === 'firstLastFrameVideo') {
+        insertPayload.start_image_url = startImageUrl; // Store URL from client
+        insertPayload.end_image_url = endImageUrl;     // Store URL from client
+    }
+    const { data: newMediaRecord, error: insertError } = await supabaseAdmin
+      .from('generated_media').insert(insertPayload).select('id').single();
     if (insertError || !newMediaRecord) {
-      console.error("Failed to insert initial media record:", insertError);
-      // TODO: Consider refunding credits here
+      console.error("[Action] Failed to insert initial media record:", insertError);
+      // TODO: Consider refunding credits here if insert fails after deduction
       return { success: false, error: `Failed to create generation record: ${insertError?.message}` };
     }
     const mediaId = newMediaRecord.id;
-    console.log(`Initial media record created with ID: ${mediaId}`);
+    console.log(`[Action] Initial media record created with ID: ${mediaId}`);
 
-    // 3. Start the Supabase Function WITHOUT waiting for it to complete
-    // This is the key change - we don't await this call
+    // 3. Prepare payload for the Edge Function (includes URLs now)
+    const functionPayload: any = { prompt, mediaType, generationMode, mediaId };
+    if (generationMode === 'firstLastFrameVideo') {
+        functionPayload.startImageUrl = startImageUrl; // Pass URL
+        functionPayload.endImageUrl = endImageUrl;     // Pass URL
+    }
+
+    // 4. Start the Supabase Function (Fire and Forget from Action's perspective)
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    supabase.functions.invoke(
-      'generate-media-handler',
-      {
-        body: { prompt, mediaType, mediaId },
-      }
-    )
-    .then(response => {
-      console.log(`Function invocation response for ${mediaId}:`, response);
+    supabase.functions.invoke('generate-media-handler', { body: functionPayload })
+    .then(response => { // Log success/failure of INVOCATION only
       if (response.error) {
-        // Update status to failed if there was an error
-        supabase
-          .from('generated_media')
-          .update({ 
-            status: 'failed', 
-            metadata: { error: `Function invocation failed: ${response.error.message}` } 
-          })
-          .eq('id', mediaId);
+         // Log the invocation error, but DON'T update DB status here
+         console.error(`[Action] Edge Function invocation for ${mediaId} reported an error (status might still be processing):`, response.error);
+      } else {
+         console.log(`[Action] Edge Function invocation for ${mediaId} acknowledged successfully (processing should start).`);
       }
     })
-    .catch(error => {
-      console.error(`Error invoking function for ${mediaId}:`, error);
-      // Update status to failed on error
-      supabase
-        .from('generated_media')
-        .update({ 
-          status: 'failed', 
-          metadata: { error: `Function error: ${error.message}` } 
-        })
-        .eq('id', mediaId);
+    .catch(error => { // Catch errors in the invoke call itself
+       // Log the invocation error, but DON'T update DB status here
+       console.error(`[Action] Error invoking Edge Function for ${mediaId} (status might still be processing):`, error);
     });
 
-    // 4. Revalidate path immediately to show pending state
+    // 5. Revalidate path immediately to show pending state
     revalidatePath('/dashboard');
 
-    // 5. Return success and mediaId immediately without waiting for generation
-    return {
-      success: true,
-      mediaId: mediaId
-    };
+    // 6. Return success (indicates the process was initiated)
+    return { success: true, mediaId: mediaId };
 
   } catch (error: any) {
-    console.error('Error in generateMedia action:', error);
+    console.error('[Action] Error in generateMedia action:', error);
+    // If the error happened before invocation (e.g., credit deduction), return error
     return { success: false, error: error.message };
   }
 }
 
 /**
- * Server action called by the frontend form to poll the status of a specific media generation.
- * It reads the run_id from the database (updated by the Supabase function) and then calls the
- * checkGenerationStatus service function.
+ * Checks the status of a media generation task by calling the service function.
  */
 export async function checkMediaStatus(mediaId: string): Promise<GenerationResult> {
-  if (!mediaId) {
-    return { success: false, error: "Media ID is required", status: 'failed' };
-  }
-
-  console.log(`Action: Polling status check for mediaId: ${mediaId}`);
-
+  if (!mediaId) { return { success: false, error: "Media ID is required", status: 'failed' }; }
+  console.log(`[Action] Polling status check for mediaId: ${mediaId}`);
   try {
-    // Fetch the record using admin client to ensure we can read intermediate states reliably
+    // Fetch record to check status and get run_id
     const { data: mediaRecord, error: fetchError } = await supabaseAdmin
-      .from('generated_media')
-      .select('status, metadata, media_url') // Select fields needed for response and run_id
-      .eq('id', mediaId)
-      .single();
+        .from('generated_media')
+        .select('status, metadata, media_url')
+        .eq('id', mediaId)
+        .single();
 
-    if (fetchError) {
-      console.error(`Action: Error fetching media record ${mediaId}:`, fetchError);
-      // Don't treat not found as a definitive failure yet, maybe record creation lagged?
-      // Return a status that keeps polling for a bit.
-      return { success: false, error: `Record fetch error: ${fetchError.message}`, status: 'processing' };
-    }
+    if (fetchError) { console.error(`[Action] Error fetching media record ${mediaId}:`, fetchError); return { success: false, error: `Record fetch error: ${fetchError.message}`, status: 'processing' }; }
+    if (!mediaRecord) { console.warn(`[Action] Media record ${mediaId} not found during poll.`); return { success: false, error: `Media record not found: ${mediaId}`, status: 'processing' }; }
 
-    if (!mediaRecord) {
-       console.warn(`Action: Media record ${mediaId} not found during poll.`);
-       // Return a status that keeps polling for a bit
-       return { success: false, error: `Media record not found: ${mediaId}`, status: 'processing' };
-    }
-
-    // If already completed or failed according to DB, return that status immediately
+    // If already completed or failed in DB, return that status
     if (mediaRecord.status === 'completed' || mediaRecord.status === 'failed') {
-      console.log(`Action: Status for ${mediaId} from DB is final: ${mediaRecord.status}`);
-      const metadata = mediaRecord.metadata as any; // Type assertion
-      return {
-        success: mediaRecord.status === 'completed',
-        status: mediaRecord.status,
-        mediaUrl: mediaRecord.media_url || undefined,
-        error: mediaRecord.status === 'failed' ? (metadata?.error || 'Failed') : undefined
-      };
+      console.log(`[Action] Status for ${mediaId} from DB is final: ${mediaRecord.status}`);
+      const metadata = mediaRecord.metadata as any;
+      return { success: mediaRecord.status === 'completed', status: mediaRecord.status, mediaUrl: mediaRecord.media_url || undefined, error: mediaRecord.status === 'failed' ? (metadata?.error || 'Failed') : undefined };
     }
 
-    // Extract run_id from metadata - it might not be there immediately after invoking the function
+    // Get run_id from metadata
     const runId = (mediaRecord.metadata as any)?.run_id;
-
     if (!runId) {
-      console.warn(`Action: run_id not yet found in metadata for mediaId ${mediaId}. Current DB status: ${mediaRecord.status}. Continuing poll...`);
-      // Return current status from DB, keep polling
-      return { success: true, status: mediaRecord.status || 'pending' };
+      // run_id might not be set yet if function invocation was slightly delayed
+      console.warn(`[Action] run_id not yet found for mediaId ${mediaId}. DB status: ${mediaRecord.status}. Continuing poll...`);
+      return { success: true, status: mediaRecord.status || 'pending' }; // Return current DB status
     }
-
-    console.log(`Action: Found run_id ${runId} for mediaId ${mediaId}. Calling service function to check API...`);
 
     // Call the *service function* which interacts with ComfyUI API and updates DB/Storage
+    console.log(`[Action] Found run_id ${runId} for mediaId ${mediaId}. Calling service function...`);
     const serviceResult = await checkGenerationStatusService(mediaId, runId);
 
     // Revalidate the dashboard path if the service function marked it as completed/failed
+    // Note: Revalidation might happen frequently if the service returns 'failed' transiently
     if (serviceResult.status === 'completed' || serviceResult.status === 'failed') {
       revalidatePath('/dashboard');
-      console.log(`Action: Revalidated /dashboard because service reported status: ${serviceResult.status}`);
+      console.log(`[Action] Revalidated /dashboard. Service status: ${serviceResult.status}`);
     }
-
-    // Return the result obtained from the service function (which reflects the latest API check)
-    return serviceResult;
+    return serviceResult; // Return result from service
 
   } catch (error: any) {
-    console.error(`Action: Error in checkMediaStatus for ${mediaId}:`, error);
+    console.error(`[Action] Error in checkMediaStatus for ${mediaId}:`, error);
     // Return failed status if the action itself encounters an error
     return { success: false, error: error.message, status: 'failed' };
   }
 }
 
-// --- deleteMedia action ---
-export async function deleteMedia(mediaId: string, storagePath: string | null): Promise<{ // Allow storagePath to be null
+/**
+ * Deletes a media item record and its associated file from storage.
+ */
+export async function deleteMedia(mediaId: string, storagePath: string | null): Promise<{
     success: boolean;
     error?: string;
   }> {
-    // Only mediaId is strictly required for DB deletion
-    if (!mediaId) {
-      return { success: false, error: "Media ID is required." };
-    }
-  
-    const supabase = await createClient();
+    if (!mediaId) { return { success: false, error: "Media ID is required." }; }
+    const supabase = await createClient(); // Use server client to get user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-  
-    if (!user || userError) {
-      return { success: false, error: 'Authentication error' };
-    }
-  
-    console.log(`Action: Attempting to delete media ${mediaId} (path: ${storagePath || 'N/A'}) for user ${user.id}`);
-  
+    if (!user || userError) { return { success: false, error: 'Authentication error' }; }
+
+    console.log(`[Action] Deleting media ${mediaId} (path: ${storagePath || 'N/A'}) for user ${user.id}`);
     try {
-      // 1. Verify ownership
+      // Verify ownership using admin client
       const { data: mediaRecord, error: fetchError } = await supabaseAdmin
-        .from('generated_media')
-        .select('id, user_id, storage_path') // Select storage_path again to be sure
-        .eq('id', mediaId)
-        .single();
-  
-      if (fetchError || !mediaRecord) {
-        console.error(`Action: Error fetching media ${mediaId} for deletion or not found:`, fetchError);
-        return { success: false, error: 'Media record not found.' };
-      }
-  
-      if (mediaRecord.user_id !== user.id) {
-        console.warn(`Action: User ${user.id} attempted to delete media ${mediaId} owned by ${mediaRecord.user_id}. Denying.`);
-        return { success: false, error: 'Permission denied.' };
-      }
-  
-      // Use the storage_path from the fetched record, which might be null/empty
+        .from('generated_media').select('id, user_id, storage_path').eq('id', mediaId).single();
+      if (fetchError || !mediaRecord) { console.error(`[Action] Error fetching media ${mediaId} for deletion or not found:`, fetchError); return { success: false, error: 'Media record not found.' }; }
+      if (mediaRecord.user_id !== user.id) { console.warn(`[Action] User ${user.id} attempted to delete media ${mediaId} owned by ${mediaRecord.user_id}. Denying.`); return { success: false, error: 'Permission denied.' }; }
+
       const actualStoragePath = mediaRecord.storage_path;
-  
-      // 2. Delete from Storage *only if path exists*
+
+      // Delete from Storage *only if path exists* using the service function
       if (actualStoragePath) {
-        console.log(`Action: Deleting file from storage: ${actualStoragePath}`);
-        const { error: storageError } = await supabaseAdmin
-          .storage
-          .from('generated-media')
-          .remove([actualStoragePath]); // Pass path in an array
-  
-        if (storageError) {
-          // Log the error but proceed to delete DB record
-          console.error(`Action: Error deleting file ${actualStoragePath} from storage (continuing to delete DB record):`, storageError);
-          // Optionally return error if storage deletion is critical
-          // return { success: false, error: `Storage deletion failed: ${storageError.message}` };
-        } else {
-            console.log(`Action: Successfully deleted file ${actualStoragePath} from storage.`);
-        }
-      } else {
-          console.log(`Action: No storage path found for media ${mediaId}, skipping storage deletion.`);
-      }
-  
-      // 3. Delete from Database
-      console.log(`Action: Deleting record from database: ${mediaId}`);
-      const { error: dbError } = await supabaseAdmin
-        .from('generated_media')
-        .delete()
-        .eq('id', mediaId);
-  
-      if (dbError) {
-        console.error(`Action: Error deleting record ${mediaId} from database:`, dbError);
-        throw new Error(`Database deletion failed: ${dbError.message}`);
-      }
-  
-      console.log(`Action: Successfully deleted record ${mediaId} from database.`);
-  
-      // 4. Revalidate path so the library updates
+        console.log(`[Action] Calling service to delete file from storage: ${actualStoragePath}`);
+        const { success: deleteSuccess, error: deleteError } = await deleteFileService(actualStoragePath); // Use storage service
+        if (!deleteSuccess) { console.error(`[Action] Error deleting file ${actualStoragePath} from storage (continuing):`, deleteError); }
+        else { console.log(`[Action] Successfully deleted file ${actualStoragePath} via service.`); }
+      } else { console.log(`[Action] No storage path for media ${mediaId}, skipping storage deletion.`); }
+
+      // Delete from Database using admin client
+      console.log(`[Action] Deleting record from database: ${mediaId}`);
+      const { error: dbError } = await supabaseAdmin.from('generated_media').delete().eq('id', mediaId);
+      if (dbError) { console.error(`[Action] Error deleting record ${mediaId} from database:`, dbError); throw new Error(`Database deletion failed: ${dbError.message}`); }
+      console.log(`[Action] Successfully deleted record ${mediaId} from database.`);
+
       revalidatePath('/dashboard');
-  
       return { success: true };
-  
     } catch (error: any) {
-      console.error(`Action: Unexpected error during media deletion for ${mediaId}:`, error);
+      console.error(`[Action] Unexpected error during media deletion for ${mediaId}:`, error);
       return { success: false, error: error.message };
     }
-  }
+}
 
 /**
- * Fetches media items for the current user to display in the library.
+ * Fetches completed and processing media items for the current user.
  */
 export async function fetchUserMedia(): Promise<{
   success: boolean;
   media: GeneratedMedia[];
   error?: string;
 }> {
-  const supabase = await createClient();
+  const supabase = await createClient(); // Uses server client
   const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-  if (!user || userError) {
-    return { success: false, error: 'Authentication error', media: [] };
-  }
+  if (!user || userError) { return { success: false, error: 'Authentication error', media: [] }; }
 
   try {
-    // Fetch all relevant statuses to display in the library
+    // Use user-context client for RLS
     const { data, error } = await supabase
       .from('generated_media')
       .select('*')
       .eq('user_id', user.id)
-      // Fetch all statuses the library might display
       .in('status', ['pending', 'processing', 'completed', 'failed'])
       .order('created_at', { ascending: false })
       .limit(50); // Adjust limit as needed
 
-    if (error) {
-      throw new Error(`Failed to fetch media: ${error.message}`);
-    }
-
-    console.log(`Fetched ${data?.length || 0} media items for user ${user.id}`);
+    if (error) { throw new Error(`Failed to fetch media: ${error.message}`); }
     return { success: true, media: data || [], error: undefined };
   } catch (error: any) {
-    console.error('Error fetching user media:', error);
+    console.error('[Action] Error fetching user media:', error);
     return { success: false, error: error.message, media: [] };
   }
+}
+
+/**
+ * Server Action to list user's generated images and input images for selection.
+ */
+export async function listUserImagesForSelection(): Promise<{
+    success: boolean;
+    images: { value: string; label: string; type: 'generated' | 'input' }[];
+    error?: string;
+}> {
+    const supabase = await createClient(); // Use server client to get user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (!user || userError) { return { success: false, images: [], error: 'Authentication error' }; }
+
+    try {
+        const [generatedResult, inputResult] = await Promise.all([
+            // Fetch completed generated images using RLS-enabled client
+            supabase
+                .from('generated_media')
+                .select('id, prompt, media_url')
+                .eq('user_id', user.id)
+                .eq('media_type', 'image')
+                .eq('status', 'completed')
+                .not('media_url', 'is', null)
+                .order('created_at', { ascending: false })
+                .limit(50), // Limit generated images shown
+            // Fetch input images using the service function (uses admin client)
+            listUserFilesService(user.id, 'inputs')
+        ]);
+
+        const fetchedImages: { value: string; label: string; type: 'generated' | 'input' }[] = [];
+
+        // Process generated images
+        if (generatedResult.error) { console.error("[Action] Error fetching generated images:", generatedResult.error); }
+        else if (generatedResult.data) { generatedResult.data.forEach(item => { fetchedImages.push({ value: item.media_url!, label: item.prompt ? `Gen: ${item.prompt.substring(0, 30)}...` : `Generated Image ${item.id.substring(0, 6)}`, type: 'generated', }); }); }
+
+        // Process input images
+        if (!inputResult.success) { console.error("[Action] Error fetching input images:", inputResult.error); }
+        else if (inputResult.files) { inputResult.files.forEach(file => { if (file.publicUrl && /\.(jpg|jpeg|png|webp|gif)$/i.test(file.name)) { fetchedImages.push({ value: file.publicUrl, label: `Input: ${file.name}`, type: 'input', }); } }); }
+
+        fetchedImages.sort((a, b) => a.label.localeCompare(b.label));
+        return { success: true, images: fetchedImages };
+
+    } catch (error: any) {
+        console.error('[Action] Error listing user images:', error);
+        return { success: false, images: [], error: error.message };
+    }
 }

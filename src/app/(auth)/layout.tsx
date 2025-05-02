@@ -32,7 +32,7 @@ export default function AuthLayout({
       <div className="absolute inset-0 -z-10 bg-gradient-to-br from-primary/5 via-background to-secondary/5" />
       
       {/* Grid pattern */}
-      <div className="absolute inset-0 -z-10 bg-[url('/grid.svg')] bg-repeat opacity-10"></div>
+      <div className="absolute inset-0 -z-10 bg-[url('/grid.svg')] bg-[length:10px_10px] bg-repeat opacity-5"></div>
       
       {/* Moving circles */}
       <div className="absolute top-[10%] left-[5%] w-[40vw] h-[40vw] rounded-full bg-primary/5 filter blur-[100px] animate-float" style={{ animationDuration: '30s' }}></div>

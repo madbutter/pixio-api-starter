@@ -7,8 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { MediaGenerationForm } from '@/components/dashboard/media-generation-form';
 import { MediaLibrary } from '@/components/dashboard/media-library';
 import { fetchUserMedia } from '@/lib/actions/media.actions';
-import { CREDIT_COSTS } from '@/lib/constants/media';
-import { Sparkles, Bot, Image as ImageIconLucide, Film } from 'lucide-react';
+// Import the new constants
+import { CREDIT_COSTS, GENERATION_MODES } from '@/lib/constants/media';
+import { Sparkles, Bot, Image as ImageIconLucide, Film, StepForward } from 'lucide-react'; // Added StepForward icon
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -27,6 +28,9 @@ export default async function DashboardPage() {
 
   const profile = profileResult.data;
   const { total: totalCredits } = creditsResult;
+
+  // Default active tab
+  const defaultTab = GENERATION_MODES[0]; // Default to the first mode ('image')
 
   return (
     <div className="container mx-auto px-4 py-10 space-y-10">
@@ -51,33 +55,39 @@ export default async function DashboardPage() {
              <div>
                 <CardTitle className="text-2xl md:text-3xl text-foreground/95">AI Media Generator</CardTitle>
                 <CardDescription className="text-base text-muted-foreground">
-                  Generate images and videos from text prompts using your credits.
+                  Generate images and videos using your credits.
                 </CardDescription>
              </div>
           </div>
         </CardHeader>
         <CardContent className="pt-8">
-          <Tabs defaultValue="image" className="w-full">
-            {/* --- Redesigned Tabs with improved inactive state visibility --- */}
-            <TabsList className="grid w-full grid-cols-2 mb-8 bg-transparent p-0 gap-4">
+          {/* Update Tabs to include the new mode */}
+          <Tabs defaultValue={defaultTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-3 mb-8 bg-transparent p-0 gap-4"> {/* Changed to grid-cols-3 */}
               <TabsTrigger
                 value="image"
                 className="flex items-center justify-center gap-2 py-3 px-4 rounded-lg border border-white/20 bg-white/15 text-foreground/80 hover:bg-white/20 hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/80 data-[state=active]:to-secondary/80 data-[state=active]:text-primary-foreground data-[state=active]:border-transparent data-[state=active]:shadow-lg transition-all duration-300 text-base font-medium"
               >
-                <ImageIconLucide className="w-5 h-5 mr-1" /> Image Generation
+                <ImageIconLucide className="w-5 h-5 mr-1" /> Image
               </TabsTrigger>
               <TabsTrigger
                 value="video"
                 className="flex items-center justify-center gap-2 py-3 px-4 rounded-lg border border-white/20 bg-white/15 text-foreground/80 hover:bg-white/20 hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/80 data-[state=active]:to-secondary/80 data-[state=active]:text-primary-foreground data-[state=active]:border-transparent data-[state=active]:shadow-lg transition-all duration-300 text-base font-medium"
               >
-                 <Film className="w-5 h-5 mr-1" /> Video Generation
+                 <Film className="w-5 h-5 mr-1" /> Video (Txt2Vid)
+              </TabsTrigger>
+              {/* New Tab Trigger */}
+              <TabsTrigger
+                value="firstLastFrameVideo"
+                className="flex items-center justify-center gap-2 py-3 px-4 rounded-lg border border-white/20 bg-white/15 text-foreground/80 hover:bg-white/20 hover:text-foreground data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/80 data-[state=active]:to-secondary/80 data-[state=active]:text-primary-foreground data-[state=active]:border-transparent data-[state=active]:shadow-lg transition-all duration-300 text-base font-medium"
+              >
+                 <StepForward className="w-5 h-5 mr-1" /> Video (Img2Vid)
               </TabsTrigger>
             </TabsList>
-            {/* --- End Redesigned Tabs --- */}
 
             <TabsContent value="image" className="mt-0">
               <MediaGenerationForm
-                mediaType="image"
+                generationMode="image" // Use generationMode prop
                 creditCost={CREDIT_COSTS.image}
                 userCredits={totalCredits}
               />
@@ -85,8 +95,17 @@ export default async function DashboardPage() {
 
             <TabsContent value="video" className="mt-0">
               <MediaGenerationForm
-                mediaType="video"
+                generationMode="video" // Use generationMode prop
                 creditCost={CREDIT_COSTS.video}
+                userCredits={totalCredits}
+              />
+            </TabsContent>
+
+            {/* New Tab Content */}
+            <TabsContent value="firstLastFrameVideo" className="mt-0">
+              <MediaGenerationForm
+                generationMode="firstLastFrameVideo" // Use generationMode prop
+                creditCost={CREDIT_COSTS.firstLastFrameVideo}
                 userCredits={totalCredits}
               />
             </TabsContent>

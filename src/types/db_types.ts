@@ -282,13 +282,16 @@ export interface Database {
           id: string
           user_id: string
           prompt: string
-          media_type: string
+          media_type: string // Stays 'image' or 'video'
           media_url: string
           storage_path: string
           credits_used: number
           status: string
           created_at: string
           metadata: Json | null
+          // Add the new columns
+          start_image_url: string | null
+          end_image_url: string | null
         }
         Insert: {
           id?: string
@@ -301,6 +304,9 @@ export interface Database {
           status?: string
           created_at?: string
           metadata?: Json | null
+          // Add the new columns
+          start_image_url?: string | null
+          end_image_url?: string | null
         }
         Update: {
           id?: string
@@ -313,6 +319,9 @@ export interface Database {
           status?: string
           created_at?: string
           metadata?: Json | null
+          // Add the new columns
+          start_image_url?: string | null
+          end_image_url?: string | null
         }
         Relationships: [
           {
@@ -324,6 +333,7 @@ export interface Database {
         ]
       }
     }
+
     Views: {
       [_ in never]: never
     }

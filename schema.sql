@@ -157,3 +157,7 @@ CREATE POLICY IF NOT EXISTS "Can update own media"
 
       ALTER TABLE public.generated_media
     ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT NULL;
+
+  ALTER TABLE public.generated_media
+ADD COLUMN IF NOT EXISTS start_image_url TEXT NULL,
+ADD COLUMN IF NOT EXISTS end_image_url TEXT NULL;
