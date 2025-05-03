@@ -3,6 +3,7 @@ import '@/app/globals.css';
 import { Toaster } from 'sonner';
 import { Inter } from 'next/font/google';
 import { siteMetadata } from '@/lib/config/metadata';
+import { Analytics } from '@vercel/analytics/next';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -18,6 +19,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         {children}
+        <Analytics />
         <Toaster position="bottom-right" />
       </body>
     </html>
