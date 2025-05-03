@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 import { Inter } from 'next/font/google';
 import { siteMetadata } from '@/lib/config/metadata';
 import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -20,6 +21,7 @@ export default function RootLayout({
       <body className={inter.className}>
         {children}
         <Analytics />
+        <SpeedInsights/>
         <Toaster position="bottom-right" />
       </body>
     </html>
