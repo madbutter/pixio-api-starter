@@ -1,15 +1,13 @@
 // src/app/layout.tsx
 import '@/app/globals.css';
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import { Toaster } from 'sonner';
+import { Inter } from 'next/font/google';
+import { siteMetadata } from '@/lib/config/metadata';
 
 const inter = Inter({ subsets: ['latin'] });
 
-export const metadata: Metadata = {
-  title: 'Pixio API Starter',
-  description: 'Unleash AI creativity with ComfyUI workflows for stunning image and video generation',
-};
+// Use the comprehensive metadata configuration
+export const metadata = siteMetadata;
 
 export default function RootLayout({
   children,
@@ -20,7 +18,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         {children}
-        <Toaster position="top-right" />
+        <Toaster position="bottom-right" />
       </body>
     </html>
   );

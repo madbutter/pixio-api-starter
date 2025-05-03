@@ -982,6 +982,17 @@ export default function LandingPage() {
               </svg>}
               index={2}
             />
+            <WorkflowCard
+              title="Wan 2.1 First to Last Frame Machine"
+              description="Generate smooth video transitions between a start and end image using the Wan 2.1 model. Bring static images to life with controlled animation."
+              link="https://api.myapps.ai/share/alisher-farhadi-wan-2-1-first-to-last-frame" // Placeholder link - update if you have a specific share link
+              icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {/* Using a slightly different icon to represent frame-to-frame */}
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M4 6h8M4 10h8M4 14h8M4 18h8" />
+              </svg>}
+              index={3} // Increment index for animation delay
+            />
+            
           </div>
         </div>
       </section>
