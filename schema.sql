@@ -142,14 +142,14 @@ CREATE POLICY "Can view own media" ON public.generated_media FOR SELECT USING (a
 CREATE POLICY "Can insert own media" ON public.generated_media FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 -- Ensure proper policies for service role updates
-CREATE POLICY IF NOT EXISTS "Allow service role to update media" 
+CREATE POLICY "Allow service role to update media" 
   ON public.generated_media 
   FOR UPDATE 
   USING (true)
   WITH CHECK (true);
 
 -- Ensure users can update their own media
-CREATE POLICY IF NOT EXISTS "Can update own media" 
+CREATE POLICY "Can update own media" 
   ON public.generated_media 
   FOR UPDATE 
   USING (auth.uid() = user_id)
