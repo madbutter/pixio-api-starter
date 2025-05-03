@@ -116,7 +116,7 @@ export const siteMetadata: Metadata = {
     title: 'Pixio API Starter - AI Media Generation',
     description: 'Unleash AI creativity with Pixio API for stunning image and video generation, powered by Supabase, NextJS, and Stripe',
     images: {
-      url: '/metadata/twitter-image.jpg',
+      url: '/metadata/twitter-image.png',
       alt: 'Pixio API Starter - AI Media Generation',
     }
   },
