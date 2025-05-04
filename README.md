@@ -99,6 +99,7 @@ You'll set up your database, storage, and three Edge Functions in the Supabase U
     *   Name it `generated-media`.
     *   Choose **Public** or **Private** (the current code expects **Public** for simplicity in displaying media URLs directly).
     *   Click "Create bucket".
+    *   Go to policies and create a new policy "Give user access to their own top level folder named uid" and allow SELECT, INSERT, UPDATE, DELETE.
 4.  **Create Edge Functions:**
     *   You need to create three edge functions for this application. These functions work together in a chain to handle the media generation process.
 
@@ -838,7 +839,7 @@ You need a storage bucket to store the generated images and videos.
    - **Public:** Generated media URLs will be publicly accessible without authentication. This is simpler for display but means anyone with the URL can view the media.
    - **Private:** Generated media requires authentication to view. This is more secure but requires signing URLs on the server before displaying them in the frontend. The current implementation assumes **Public** access for simplicity in fetching the `media_url` directly. If you need private storage, you'll need to modify the `MediaCard` component to generate signed URLs.
 5. Click "Create bucket".
-6. (Optional but Recommended) Configure Row Level Security (RLS) for the bucket if you chose Private access, or review the default policies for Public access.
+6. Go to policies and create a new policy "Give user access to their own top level folder named uid" and allow SELECT, INSERT, UPDATE, DELETE.
 
 ### 5. Create Supabase Edge Functions
 
