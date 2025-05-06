@@ -111,8 +111,8 @@ export const siteMetadata: Metadata = {
   // Twitter metadata
   twitter: {
     card: 'summary_large_image',
-    site: '@pixioapi',
-    creator: '@pixioapi',
+    site: '@pixio_ai',
+    creator: '@pixio_ai',
     title: 'Pixio API Starter - AI Media Generation',
     description: 'Unleash AI creativity with Pixio API for stunning image and video generation, powered by Supabase, NextJS, and Stripe',
     images: {
