@@ -776,7 +776,7 @@ export default function LandingPage() {
                   } : {})
                 }}
               >
-                Pixio API Starter
+                Shaggylab AI Pet Portraits
               </h1>
 
               <style jsx global>{`
