@@ -1,7 +1,13 @@
 // supabase/functions/process-result-handler/index.ts
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { corsHeaders } from '../_shared/cors.ts';
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS'
+};
 
 // Define expected structure for metadata updates
 interface MediaMetadataUpdate { run_id?: string | null; generationMode?: string | null; error?: string | null; failed_at?: string | null; final_api_status?: string | null; original_url?: string | null; file_size?: number | null; completed_at?: string | null; [key: string]: any; }

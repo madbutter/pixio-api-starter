@@ -1,6 +1,5 @@
 // supabase/functions/generate-media-handler/index.ts
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { corsHeaders } from '../_shared/cors.ts';
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 
 const DEPLOYMENT_IDS = {
@@ -9,6 +8,13 @@ const DEPLOYMENT_IDS = {
   firstLastFrameVideo: '8c463102-0525-4cf1-8535-731fee0f93b4',
 };
 type GenerationMode = keyof typeof DEPLOYMENT_IDS;
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS'
+};
+
 
 async function updateStatusOnFunctionError(
     supabaseAdmin: SupabaseClient, mediaId: string | null, errorMessage: string
