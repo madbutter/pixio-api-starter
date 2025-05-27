@@ -750,15 +750,16 @@ export default function LandingPage() {
             transition={{ duration: 0.8 }}
           >
             <motion.div
-              className="inline-block mb-4 px-4 py-1.5 bg-white/10 dark:bg-white/5 backdrop-blur-xl rounded-full text-foreground/90 text-sm border border-white/20 shadow-lg"
+              className="mb-8"
               initial={mounted ? { opacity: 0, y: -20 } : { opacity: 1, y: 0 }}
               animate={mounted ? { opacity: 1, y: 0 } : {}}
               transition={{ delay: 0.1, duration: 0.6 }}
             >
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="h-4 w-4 text-accent/80" />
-                Powered by Pixio A100 GPUs
-              </span>
+              <img 
+                src="/logo.svg" 
+                alt="Shaggylab Logo" 
+                className="mx-auto max-w-[300px] h-auto"
+              />
             </motion.div>
 
             <motion.div
