@@ -750,7 +750,7 @@ export default function LandingPage() {
             transition={{ duration: 0.8 }}
           >
             <motion.div
-              className="-mt-32 -mb-32"
+              className="-mt-48 -mb-48"
               initial={mounted ? { opacity: 0, y: -20 } : { opacity: 1, y: 0 }}
               animate={mounted ? { opacity: 1, y: 0 } : {}}
               transition={{ delay: 0.1, duration: 0.6 }}
@@ -758,7 +758,7 @@ export default function LandingPage() {
               <img 
                 src="/logo.svg" 
                 alt="Shaggylab Logo" 
-                className="mx-auto max-w-[1800px] h-auto"
+                className="mx-auto max-w-[2000px] h-auto"
               />
             </motion.div>
 
