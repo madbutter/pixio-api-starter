@@ -742,7 +742,7 @@ export default function LandingPage() {
         className="relative z-10"
         style={mounted ? { opacity: heroOpacity, y: heroY } : {}}
       >
-        <div className="container mx-auto px-4">
+        <div className="w-full">
           <motion.div
             className="text-center"
             initial={mounted ? { opacity: 0, y: 20 } : { opacity: 1, y: 0 }}
@@ -750,7 +750,7 @@ export default function LandingPage() {
             transition={{ duration: 0.8 }}
           >
             <motion.div
-              className="-mt-12 -mb-12"
+              className="-mt-20 -mb-20"
               initial={mounted ? { opacity: 0, y: -20 } : { opacity: 1, y: 0 }}
               animate={mounted ? { opacity: 1, y: 0 } : {}}
               transition={{ delay: 0.1, duration: 0.6 }}
@@ -758,7 +758,7 @@ export default function LandingPage() {
               <img 
                 src="/logo.svg" 
                 alt="Shaggylab Logo" 
-                className="mx-auto max-w-[1600px] h-auto"
+                className="mx-auto max-w-[1800px] h-auto"
               />
             </motion.div>
 
