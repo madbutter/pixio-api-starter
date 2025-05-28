@@ -739,7 +739,7 @@ export default function LandingPage() {
 
       {/* Hero section */}
       <motion.section
-        className="relative z-10"
+        className="relative z-10 top-0 left-0 w-full"
         style={mounted ? { opacity: heroOpacity, y: heroY } : {}}
       >
         <div className="w-full">
@@ -750,7 +750,7 @@ export default function LandingPage() {
             transition={{ duration: 0.8 }}
           >
             <motion.div
-              className="-mt-20 -mb-20"
+              className="-mt-32 -mb-32"
               initial={mounted ? { opacity: 0, y: -20 } : { opacity: 1, y: 0 }}
               animate={mounted ? { opacity: 1, y: 0 } : {}}
               transition={{ delay: 0.1, duration: 0.6 }}
