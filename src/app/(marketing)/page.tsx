@@ -739,18 +739,18 @@ export default function LandingPage() {
 
       {/* Hero section */}
       <motion.section
-        className="relative py-24 md:py-36 z-10"
+        className="relative py-8 md:py-12 z-10"
         style={mounted ? { opacity: heroOpacity, y: heroY } : {}}
       >
         <div className="container mx-auto px-4 relative">
           <motion.div
-            className="max-w-3xl mx-auto text-center"
+            className="mx-auto text-center"
             initial={mounted ? { opacity: 0, y: 20 } : { opacity: 1, y: 0 }}
             animate={mounted ? { opacity: 1, y: 0 } : {}}
             transition={{ duration: 0.8 }}
           >
             <motion.div
-              className="mb-2"
+              className="mb-0"
               initial={mounted ? { opacity: 0, y: -20 } : { opacity: 1, y: 0 }}
               animate={mounted ? { opacity: 1, y: 0 } : {}}
               transition={{ delay: 0.1, duration: 0.6 }}
@@ -758,7 +758,7 @@ export default function LandingPage() {
               <img 
                 src="/logo.svg" 
                 alt="Shaggylab Logo" 
-                className="mx-auto max-w-[600px] h-auto"
+                className="mx-auto max-w-[800px] h-auto"
               />
             </motion.div>
 
